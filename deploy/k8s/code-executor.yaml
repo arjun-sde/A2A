@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: code-executor-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: code-executor-service
+  template:
+    metadata:
+      labels:
+        app: code-executor-service
+    spec:
+      containers:
+        - name: code-executor-service
+          image: code-executor-service:latest
+          ports:
+            - containerPort: 8001
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8001
+          env:
+            - name: AUTH_ISSUER
+              value: a2a-local-auth
+            - name: AUTH_JWKS_URL
+              value: http://planner-service/.well-known/jwks.json
+            - name: EXECUTOR_API_AUDIENCE
+              value: code-executor-service
+            - name: EXECUTOR_DATABASE_URL
+              value: postgresql://<user>:<password>@<cloudsql-host>:5432/a2a?sslmode=disable
+            - name: REDIS_URL
+              value: redis://<redis-host>:6379/0
+            - name: EVENT_STREAM_BLOCK_MS
+              value: "1000"
+            - name: EVENT_STREAM_MAXLEN
+              value: "1000"
+            - name: EXECUTOR_WORKER_CONCURRENCY
+              value: "2"
+            - name: EXECUTOR_QUEUE_POLL_SECONDS
+              value: "0.5"
+            - name: EXECUTOR_QUEUE_LEASE_SECONDS
+              value: "30"
+            - name: EXECUTOR_QUEUE_RETRY_DELAY_SECONDS
+              value: "2"
+            - name: EXECUTOR_QUEUE_MAX_ATTEMPTS
+              value: "3"
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2"
+              memory: "2Gi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: code-executor-service
+spec:
+  selector:
+    app: code-executor-service
+  ports:
+    - port: 80
+      targetPort: 8001

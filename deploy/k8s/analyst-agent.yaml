@@ -1,0 +1,60 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: analyst-agent-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: analyst-agent-service
+  template:
+    metadata:
+      labels:
+        app: analyst-agent-service
+    spec:
+      containers:
+        - name: analyst-agent-service
+          image: analyst-agent-service:latest
+          ports:
+            - containerPort: 8002
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8002
+          env:
+            - name: AUTH_ISSUER
+              value: a2a-local-auth
+            - name: AUTH_JWKS_URL
+              value: http://planner-service/.well-known/jwks.json
+            - name: ANALYST_API_AUDIENCE
+              value: analyst-agent-service
+            - name: ANALYST_DATABASE_URL
+              value: postgresql://<user>:<password>@<cloudsql-host>:5432/a2a?sslmode=disable
+            - name: REDIS_URL
+              value: redis://<redis-host>:6379/0
+            - name: EVENT_STREAM_BLOCK_MS
+              value: "1000"
+            - name: EVENT_STREAM_MAXLEN
+              value: "1000"
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: analyst-agent-service
+spec:
+  selector:
+    app: analyst-agent-service
+  ports:
+    - port: 80
+      targetPort: 8002

@@ -1,0 +1,109 @@
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_DB: a2a
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d a2a"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+  redis:
+    image: redis:7
+    command: ["redis-server", "--appendonly", "yes"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+
+  code-executor:
+    build:
+      context: .
+      dockerfile: services/code_executor/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      AUTH_ISSUER: a2a-local-auth
+      AUTH_JWKS_URL: http://planner:8000/.well-known/jwks.json
+      EXECUTOR_API_AUDIENCE: code-executor-service
+      EXECUTOR_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/a2a?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      EVENT_STREAM_BLOCK_MS: "1000"
+      EVENT_STREAM_MAXLEN: "1000"
+      EXECUTOR_WORKER_CONCURRENCY: "2"
+      EXECUTOR_QUEUE_POLL_SECONDS: "0.5"
+      EXECUTOR_QUEUE_LEASE_SECONDS: "30"
+      EXECUTOR_QUEUE_RETRY_DELAY_SECONDS: "2"
+      EXECUTOR_QUEUE_MAX_ATTEMPTS: "3"
+    ports:
+      - "8001:8001"
+
+  analyst-agent:
+    build:
+      context: .
+      dockerfile: services/analyst_agent/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      AUTH_ISSUER: a2a-local-auth
+      AUTH_JWKS_URL: http://planner:8000/.well-known/jwks.json
+      ANALYST_API_AUDIENCE: analyst-agent-service
+      ANALYST_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/a2a?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      EVENT_STREAM_BLOCK_MS: "1000"
+      EVENT_STREAM_MAXLEN: "1000"
+    ports:
+      - "8002:8002"
+
+  planner:
+    build:
+      context: .
+      dockerfile: services/planner/Dockerfile
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      code-executor:
+        condition: service_started
+      analyst-agent:
+        condition: service_started
+    environment:
+      AUTH_ISSUER: a2a-local-auth
+      AUTH_JWKS_URL: http://127.0.0.1:8000/.well-known/jwks.json
+      PLANNER_API_AUDIENCE: planner-service
+      EXECUTOR_API_AUDIENCE: code-executor-service
+      ANALYST_API_AUDIENCE: analyst-agent-service
+      EXECUTOR_AGENT_CARD_URL: http://code-executor:8001/agents/code-executor/.well-known/agent-card.json
+      ANALYST_AGENT_CARD_URL: http://analyst-agent:8002/agents/analyst/.well-known/agent-card.json
+      PLANNER_DATABASE_URL: postgresql://postgres:postgres@postgres:5432/a2a?sslmode=disable
+      REDIS_URL: redis://redis:6379/0
+      EVENT_STREAM_BLOCK_MS: "1000"
+      EVENT_STREAM_MAXLEN: "1000"
+      SERVICE_PRIVATE_KEY_PATH: /app/dev_auth/private_key.pem
+      SERVICE_TOKEN_KID: planner-local-dev-key
+      SERVICE_TOKEN_SUBJECT: planner-service
+    ports:
+      - "8000:8000"
+
+volumes:
+  postgres-data:
+  redis-data:
