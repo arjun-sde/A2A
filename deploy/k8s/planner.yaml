@@ -1,0 +1,74 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: planner-service
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: planner-service
+  template:
+    metadata:
+      labels:
+        app: planner-service
+    spec:
+      containers:
+        - name: planner-service
+          image: planner-service:latest
+          ports:
+            - containerPort: 8000
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+          env:
+            - name: AUTH_ISSUER
+              value: a2a-local-auth
+            - name: AUTH_JWKS_URL
+              value: http://127.0.0.1:8000/.well-known/jwks.json
+            - name: PLANNER_API_AUDIENCE
+              value: planner-service
+            - name: EXECUTOR_API_AUDIENCE
+              value: code-executor-service
+            - name: ANALYST_API_AUDIENCE
+              value: analyst-agent-service
+            - name: EXECUTOR_AGENT_CARD_URL
+              value: http://code-executor-service/agents/code-executor/.well-known/agent-card.json
+            - name: ANALYST_AGENT_CARD_URL
+              value: http://analyst-agent-service/agents/analyst/.well-known/agent-card.json
+            - name: PLANNER_DATABASE_URL
+              value: postgresql://<user>:<password>@<cloudsql-host>:5432/a2a?sslmode=disable
+            - name: REDIS_URL
+              value: redis://<redis-host>:6379/0
+            - name: EVENT_STREAM_BLOCK_MS
+              value: "1000"
+            - name: EVENT_STREAM_MAXLEN
+              value: "1000"
+            - name: SERVICE_PRIVATE_KEY_PATH
+              value: /app/dev_auth/private_key.pem
+            - name: SERVICE_TOKEN_KID
+              value: planner-local-dev-key
+            - name: SERVICE_TOKEN_SUBJECT
+              value: planner-service
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "500m"
+              memory: "512Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: planner-service
+spec:
+  selector:
+    app: planner-service
+  ports:
+    - port: 80
+      targetPort: 8000
